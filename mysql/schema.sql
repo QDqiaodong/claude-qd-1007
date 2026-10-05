@@ -16,6 +16,8 @@ USE amusement_park;
 
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS season_pass;
+DROP TABLE IF EXISTS ride_safety_check_item;
+DROP TABLE IF EXISTS ride_safety_batch;
 DROP TABLE IF EXISTS ride;
 DROP TABLE IF EXISTS park_show;
 DROP TABLE IF EXISTS fnb;
@@ -50,7 +52,48 @@ CREATE TABLE ride (
     min_height_cm INT,
     max_age INT,
     status VARCHAR(16) NOT NULL,
-    created_at DATETIME
+    created_at DATETIME,
+    INDEX idx_ride_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------- 检修安全复核批次 ----------------
+-- 状态：检修中 / 待放行 / 已放行 / 已失效 / 已过期。
+-- 提交时快照设施限制与必检项；提交后变化只作废旧批次，历史批次不被覆盖。
+CREATE TABLE ride_safety_batch (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    batch_no VARCHAR(48) NOT NULL UNIQUE,
+    ride_id BIGINT NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    inspector_name VARCHAR(32),
+    submitted_at DATETIME,
+    approver_name VARCHAR(32),
+    released_at DATETIME,
+    snapshot_status VARCHAR(16),
+    snapshot_min_height_cm INT,
+    snapshot_max_age INT,
+    snapshot_check_items VARCHAR(255),
+    invalid_reason VARCHAR(255),
+    created_at DATETIME NOT NULL,
+    INDEX idx_safety_batch_ride (ride_id, created_at, id),
+    INDEX idx_safety_batch_status (status),
+    CONSTRAINT fk_safety_batch_ride FOREIGN KEY (ride_id) REFERENCES ride (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------- 安全复核逐项结果 ----------------
+CREATE TABLE ride_safety_check_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    batch_id BIGINT NOT NULL,
+    item_code VARCHAR(32) NOT NULL,
+    item_name VARCHAR(64) NOT NULL,
+    result VARCHAR(16) NOT NULL,
+    required TINYINT(1) NOT NULL DEFAULT 1,
+    remark VARCHAR(255),
+    inspector_name VARCHAR(32),
+    checked_at DATETIME,
+    UNIQUE KEY uk_safety_item_batch_code (batch_id, item_code),
+    INDEX idx_safety_item_batch (batch_id),
+    CONSTRAINT fk_safety_item_batch FOREIGN KEY (batch_id)
+        REFERENCES ride_safety_batch (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------- 园区演出（show 为保留字，表名用 park_show） ----------------
@@ -105,6 +148,19 @@ INSERT INTO ride (id, ride_code, ride_name, min_height_cm, max_age, status, crea
 (6, 'R-006', '摩天轮', 100, 75, '开放', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 95 DAY),
 (7, 'R-007', '海盗船', 110, 65, '关闭', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 95 DAY),
 (8, 'R-008', '欢乐碰碰车', 100, 70, '开放', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 95 DAY);
+
+INSERT INTO ride_safety_batch
+    (id, batch_no, ride_id, status, created_at)
+VALUES
+    (1, CONCAT('AQ-SEED-', LPAD(1, 8, '0')), 3, '检修中', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 2 DAY);
+
+INSERT INTO ride_safety_check_item
+    (batch_id, item_code, item_name, result, required)
+VALUES
+    (1, 'brake', '制动装置', '待检', 1),
+    (1, 'restraint', '约束装置', '待检', 1),
+    (1, 'emergency_stop', '紧急停机', '待检', 1),
+    (1, 'no_load_trial', '空载试运行', '待检', 1);
 
 INSERT INTO park_show (id, show_code, show_name, venue, capacity, booked, show_at, created_at) VALUES
 (1, 'S-001', '花车大巡游', '中央广场', 500, 320, UTC_TIMESTAMP() + INTERVAL 8 HOUR + INTERVAL 2 DAY, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 70 DAY),

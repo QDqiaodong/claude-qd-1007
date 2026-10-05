@@ -24,8 +24,8 @@ public final class Dict {
 
     private static final Map<String, List<String>> RIDE_NEXT = Map.of(
             "开放", List.of("检修", "关闭"),
-            "检修", List.of("开放"),
-            "关闭", List.of("开放"));
+            "检修", List.of(),
+            "关闭", List.of("开放", "检修"));
 
     // ---------------- 餐饮业态与状态 ----------------
     public static final List<String> FNB_TYPES = List.of("快餐", "正餐", "饮品");
@@ -73,7 +73,7 @@ public final class Dict {
         return status == null ? "" : RIDE_STATUS_NAME.getOrDefault(status, status);
     }
 
-    /** 设施状态流转：开放 ↔ 检修，开放 → 关闭 → 开放 */
+    /** 设施状态流转：开放→检修/关闭，关闭→开放/检修；检修→开放必须走安全放行。 */
     public static boolean canTransferRide(String from, String to) {
         if (from == null || to == null) {
             return false;

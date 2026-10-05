@@ -2,12 +2,14 @@ package com.amusement.park.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.amusement.park.common.BizException;
 import com.amusement.park.common.Dict;
+import com.amusement.park.dto.UpdateRideRequest;
 import com.amusement.park.entity.Ride;
 import com.amusement.park.repository.RideRepository;
 
@@ -22,9 +24,11 @@ import com.amusement.park.repository.RideRepository;
 public class RideService {
 
     private final RideRepository rideRepository;
+    private final SafetyReviewService safetyReviewService;
 
-    public RideService(RideRepository rideRepository) {
+    public RideService(RideRepository rideRepository, SafetyReviewService safetyReviewService) {
         this.rideRepository = rideRepository;
+        this.safetyReviewService = safetyReviewService;
     }
 
     public List<Ride> list(String status) {
@@ -66,48 +70,68 @@ public class RideService {
             throw new BizException("设施状态不合法：" + ride.getStatus());
         }
         ride.setCreatedAt(LocalDateTime.now());
-        return rideRepository.save(ride);
+        Ride saved = rideRepository.save(ride);
+        if ("检修".equals(saved.getStatus())) {
+            safetyReviewService.startForRide(saved);
+        }
+        return saved;
     }
 
     @Transactional
-    public Ride update(Long id, Ride input) {
-        Ride ride = get(id);
-        if (input.getRideName() != null && !input.getRideName().isBlank()) {
-            ride.setRideName(input.getRideName().trim());
+    public Ride update(Long id, UpdateRideRequest input) {
+        Ride ride = rideRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new BizException("设施不存在：" + id));
+        Integer oldMinHeight = ride.getMinHeightCm();
+        Integer oldMaxAge = ride.getMaxAge();
+
+        if (input.rideName() != null && !input.rideName().isBlank()) {
+            ride.setRideName(input.rideName().trim());
         }
-        if (input.getMinHeightCm() != null) {
-            if (input.getMinHeightCm() < 0) {
+        if (input.minHeightCm() != null) {
+            if (input.minHeightCm() < 0) {
                 throw new BizException("最低身高不能为负数");
             }
-            ride.setMinHeightCm(input.getMinHeightCm());
+            ride.setMinHeightCm(input.minHeightCm());
         }
-        if (input.getMaxAge() != null) {
-            if (input.getMaxAge() < 0) {
+        if (input.maxAge() != null) {
+            if (input.maxAge() < 0) {
                 throw new BizException("最大年龄不能为负数");
             }
-            ride.setMaxAge(input.getMaxAge());
+            ride.setMaxAge(input.maxAge());
         }
-        if (input.getStatus() != null && !input.getStatus().isBlank()) {
-            if (!Dict.isValidRideStatus(input.getStatus())) {
-                throw new BizException("设施状态不合法：" + input.getStatus());
-            }
-            ride.setStatus(input.getStatus());
+
+        Ride saved = rideRepository.save(ride);
+        if (!Objects.equals(oldMinHeight, saved.getMinHeightCm())
+                || !Objects.equals(oldMaxAge, saved.getMaxAge())) {
+            safetyReviewService.invalidateForRideChange(saved, "提交后乘坐限制已变化，原安全复核批次失效");
         }
-        return rideRepository.save(ride);
+        return saved;
     }
 
-    /** 状态流转 */
+    /** 状态流转；「检修 → 开放」只能由安全复核批次放行完成。 */
     @Transactional
     public Ride transfer(Long id, String target) {
-        Ride ride = get(id);
+        Ride ride = rideRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new BizException("设施不存在：" + id));
         if (!Dict.isValidRideStatus(target)) {
             throw new BizException("设施状态不合法：" + target);
+        }
+        if ("开放".equals(target) && "检修".equals(ride.getStatus())) {
+            throw new BizException("检修后不能直接开放，请完成安全复核并由运营负责人放行");
         }
         if (!Dict.canTransferRide(ride.getStatus(), target)) {
             throw new BizException("不允许从「" + ride.getStatus() + "」转为「" + target + "」");
         }
+        String oldStatus = ride.getStatus();
         ride.setStatus(target);
-        return rideRepository.save(ride);
+        Ride saved = rideRepository.save(ride);
+        if ("检修".equals(target) && !"检修".equals(oldStatus)) {
+            safetyReviewService.startForRide(saved);
+        }
+        if (!"检修".equals(target) && "检修".equals(oldStatus)) {
+            safetyReviewService.invalidateForRideLeaveMaintenance(saved);
+        }
+        return saved;
     }
 
     /**
@@ -117,7 +141,8 @@ public class RideService {
      * @param age      游客年龄
      */
     public Ride board(Long id, Integer heightCm, Integer age) {
-        Ride ride = get(id);
+        Ride ride = rideRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new BizException("设施不存在：" + id));
         if (!"开放".equals(ride.getStatus())) {
             throw new BizException("设施「" + ride.getRideName() + "」当前为「" + ride.getStatus() + "」，未开放无法乘坐");
         }

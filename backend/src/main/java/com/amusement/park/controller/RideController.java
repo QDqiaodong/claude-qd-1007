@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.amusement.park.common.ApiResponse;
+import com.amusement.park.dto.UpdateRideRequest;
 import com.amusement.park.entity.Ride;
 import com.amusement.park.service.RideService;
 
@@ -42,7 +43,7 @@ public class RideController {
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<Ride> update(@PathVariable Long id, @RequestBody Ride input) {
+    public ApiResponse<Ride> update(@PathVariable Long id, @RequestBody UpdateRideRequest input) {
         return ApiResponse.success("已更新", rideService.update(id, input));
     }
 

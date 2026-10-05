@@ -31,6 +31,17 @@ export default {
   boardRide: (id, heightCm, age) =>
     call(http.post(`/rides/${id}/board`, null, params({ heightCm, age }))),
 
+  // ---------------- 检修复核 / 复开放行 ----------------
+  listSafetyBatches: (rideId) =>
+    call(http.get('/safety-batches', params(rideId ? { rideId } : {}))),
+  getSafetyBatch: (id) => call(http.get(`/safety-batches/${id}`)),
+  startSafetyBatch: (rideId) =>
+    call(http.post('/safety-batches', null, params({ rideId }))),
+  saveSafetyItem: (id, d) => call(http.post(`/safety-batches/${id}/items`, d)),
+  submitSafetyBatch: (id, d) => call(http.post(`/safety-batches/${id}/submit`, d || {})),
+  reviseSafetyBatch: (id) => call(http.post(`/safety-batches/${id}/revise`)),
+  releaseSafetyBatch: (id, d) => call(http.post(`/safety-batches/${id}/release`, d || {})),
+
   // ---------------- 园区演出 ----------------
   listShows: () => call(http.get('/shows')),
   createShow: (d) => call(http.post('/shows', d)),
