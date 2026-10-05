@@ -15,6 +15,7 @@ CREATE DATABASE IF NOT EXISTS amusement_park
 USE amusement_park;
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS ride_inspection;
 DROP TABLE IF EXISTS season_pass;
 DROP TABLE IF EXISTS ride;
 DROP TABLE IF EXISTS park_show;
@@ -51,6 +52,34 @@ CREATE TABLE ride (
     max_age INT,
     status VARCHAR(16) NOT NULL,
     created_at DATETIME
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------- 检修安全复核批次 ----------------
+-- 设施进入检修时生成本次复核批次；批次只新增不覆盖：
+--   填写中 → 待放行 → 已放行；待放行内容过期 → 已失效（终态，历史保留可追溯）。
+-- 四项必检（制动/约束装置/紧急停机/空载试运行）：NULL=未检，1=合格，0=不合格。
+-- snapshot_* 为提交时设施限制快照，放行时与当前值比对，不一致即视为复核内容过期。
+CREATE TABLE ride_inspection (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    ride_id BIGINT NOT NULL,
+    batch_no VARCHAR(48) NOT NULL UNIQUE,
+    brake_ok TINYINT(1),
+    restraint_ok TINYINT(1),
+    emergency_stop_ok TINYINT(1),
+    trial_run_ok TINYINT(1),
+    remark VARCHAR(255),
+    status VARCHAR(16) NOT NULL,
+    snapshot_min_height_cm INT,
+    snapshot_max_age INT,
+    submitted_by VARCHAR(32),
+    submitted_at DATETIME,
+    released_by VARCHAR(32),
+    released_at DATETIME,
+    invalidated_at DATETIME,
+    invalidate_reason VARCHAR(128),
+    created_at DATETIME,
+    CONSTRAINT fk_inspection_ride FOREIGN KEY (ride_id) REFERENCES ride (id),
+    INDEX idx_inspection_ride_status (ride_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------- 园区演出（show 为保留字，表名用 park_show） ----------------
@@ -105,6 +134,26 @@ INSERT INTO ride (id, ride_code, ride_name, min_height_cm, max_age, status, crea
 (6, 'R-006', '摩天轮', 100, 75, '开放', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 95 DAY),
 (7, 'R-007', '海盗船', 110, 65, '关闭', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 95 DAY),
 (8, 'R-008', '欢乐碰碰车', 100, 70, '开放', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 95 DAY);
+
+-- 高空跳楼机（R-003，检修中）的复核批次历史：
+--   0001 上次检修已放行；0002 提交后最低身高调整导致失效（历史保留可追溯）；0003 本次填写中。
+INSERT INTO ride_inspection
+(id, ride_id, batch_no, brake_ok, restraint_ok, emergency_stop_ok, trial_run_ok, remark, status,
+ snapshot_min_height_cm, snapshot_max_age, submitted_by, submitted_at, released_by, released_at,
+ invalidated_at, invalidate_reason, created_at) VALUES
+(1, 3, 'INSP-R-003-0001', 1, 1, 1, 1, '季度定检，各项正常', '已放行',
+ 140, 50, '周立安', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY,
+ '王国栋', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY + INTERVAL 2 HOUR,
+ NULL, NULL, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 41 DAY),
+(2, 3, 'INSP-R-003-0002', 1, 1, 1, 1, NULL, '已失效',
+ 135, 50, '周立安', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 3 DAY,
+ NULL, NULL,
+ UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 3 DAY + INTERVAL 5 HOUR,
+ '设施乘坐限制已变更（最低身高/最高年龄），复核内容过期',
+ UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 4 DAY),
+(3, 3, 'INSP-R-003-0003', 1, 1, NULL, NULL, NULL, '填写中',
+ NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+ UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 1 DAY);
 
 INSERT INTO park_show (id, show_code, show_name, venue, capacity, booked, show_at, created_at) VALUES
 (1, 'S-001', '花车大巡游', '中央广场', 500, 320, UTC_TIMESTAMP() + INTERVAL 8 HOUR + INTERVAL 2 DAY, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 70 DAY),

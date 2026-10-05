@@ -27,6 +27,13 @@ public final class Dict {
             "检修", List.of("开放"),
             "关闭", List.of("开放"));
 
+    // ---------------- 检修安全复核批次 ----------------
+    /** 批次状态：填写中 → 待放行 → 已放行；待放行内容过期 → 已失效（终态，不可放行） */
+    public static final List<String> INSPECTION_STATUSES = List.of("填写中", "待放行", "已放行", "已失效");
+
+    /** 必检项：逐项记录，全部「合格」后才允许提交复核 */
+    public static final List<String> RIDE_CHECK_ITEMS = List.of("制动系统", "约束装置", "紧急停机", "空载试运行");
+
     // ---------------- 餐饮业态与状态 ----------------
     public static final List<String> FNB_TYPES = List.of("快餐", "正餐", "饮品");
 

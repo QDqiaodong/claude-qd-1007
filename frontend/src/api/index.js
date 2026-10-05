@@ -31,6 +31,16 @@ export default {
   boardRide: (id, heightCm, age) =>
     call(http.post(`/rides/${id}/board`, null, params({ heightCm, age }))),
 
+  // ---------------- 检修安全复核与放行 ----------------
+  listInspections: (rideId) => call(http.get(`/rides/${rideId}/inspections`)),
+  activeInspection: (rideId) => call(http.get(`/rides/${rideId}/inspections/active`)),
+  ensureInspection: (rideId) => call(http.post(`/rides/${rideId}/inspections`)),
+  saveInspectionItems: (id, d) => call(http.put(`/inspections/${id}/items`, d)),
+  submitInspection: (id, operator) =>
+    call(http.post(`/inspections/${id}/submit`, null, params({ operator }))),
+  releaseInspection: (id, operator) =>
+    call(http.post(`/inspections/${id}/release`, null, params({ operator }))),
+
   // ---------------- 园区演出 ----------------
   listShows: () => call(http.get('/shows')),
   createShow: (d) => call(http.post('/shows', d)),
